@@ -299,41 +299,186 @@ def evaluate_policy(policy_fn, num_games=10000, num_decks=NUM_DECKS, reshuffle_c
     }
 
 
+def play_interactive_game(learned_policy):
+    """
+    Interactive terminal blackjack game.
+    User plays against the dealer with AI recommendations.
+    """
+    print("\n" + "="*60)
+    print("WELCOME TO BLACKJACK - AI ADVISOR MODE")
+    print("="*60)
+    print("\nThe AI will recommend moves, but YOU decide!")
+    print("Card counting is enabled - watch the true count.\n")
+
+    shoe = Shoe(num_decks=NUM_DECKS, reshuffle_cut=RESHUFFLE_CUT)
+    total_hands = 0
+    wins = 0
+    losses = 0
+    pushes = 0
+
+    while True:
+        shoe.start_new_hand()
+        player = draw_hand(shoe)
+        dealer = draw_hand(shoe)
+        dealer_up = dealer[0]
+
+        total_hands += 1
+        print("\n" + "="*60)
+        print(f"HAND #{total_hands}")
+        print("="*60)
+        print(f"Dealer shows: {dealer_up}")
+        print(f"Your hand: {player} -> Sum: {sum_hand(player)}")
+        if usable_ace(player):
+            print("   (You have a usable Ace!)")
+
+        # Show count
+        tc = shoe.true_count()
+        print(f"True Count: {tc:.2f} | Decks remaining: {shoe.decks_remaining():.1f}")
+
+        # Get AI recommendation
+        state = state_from_hands(player, dealer_up, shoe)
+        ai_rec = learned_policy(state)
+        print(f"AI recommends: {ai_rec.upper()}")
+
+        # Player's turn
+        player_busted = False
+        while True:
+            choice = input("\nYour move - [H]it or [S]tand? ").strip().lower()
+
+            if choice not in ['h', 's', 'hit', 'stand']:
+                print("Invalid input! Please enter H or S.")
+                continue
+
+            action = 'hit' if choice in ['h', 'hit'] else 'stand'
+
+            if action == 'hit':
+                card = draw_card(shoe)
+                player.append(card)
+                print(f"\nYou drew: {card}")
+                print(f"Your hand: {player} -> Sum: {sum_hand(player)}")
+
+                if is_bust(player):
+                    print("\nBUST! You lose this hand.")
+                    player_busted = True
+                    losses += 1
+                    break
+
+                # Get new AI recommendation for updated hand
+                state = state_from_hands(player, dealer_up, shoe)
+                ai_rec = learned_policy(state)
+                print(f"AI now recommends: {ai_rec.upper()}")
+
+            else:  # stand
+                print("\nYou stand.")
+                break
+
+        # Dealer's turn (if player didn't bust)
+        if not player_busted:
+            print(f"\nDealer reveals: {dealer} -> Sum: {sum_hand(dealer)}")
+            dealer = dealer_play(dealer, shoe)
+            print(f"Dealer's final hand: {dealer} -> Sum: {sum_hand(dealer)}")
+
+            if is_bust(dealer):
+                print("Dealer busts!")
+
+            # Determine winner
+            result = score(player, dealer)
+            player_sum = sum_hand(player)
+            dealer_sum = sum_hand(dealer)
+
+            print(f"\nFinal: You {player_sum} vs Dealer {dealer_sum}")
+
+            if result == 1:
+                print("YOU WIN!")
+                wins += 1
+            elif result == 0:
+                print("PUSH (tie)")
+                pushes += 1
+            else:
+                print("Dealer wins.")
+                losses += 1
+
+        # Show running statistics
+        print(f"\nSession Stats: {wins}W - {losses}L - {pushes}P ({total_hands} hands)")
+        if total_hands > 0:
+            win_rate = wins / total_hands * 100
+            print(f"   Win Rate: {win_rate:.1f}%")
+
+        # Ask to continue
+        play_again = input("\nPlay another hand? [Y/n]: ").strip().lower()
+        if play_again == 'n' or play_again == 'no':
+            print("\n" + "="*60)
+            print("Thanks for playing!")
+            print(f"Final Stats: {wins}W - {losses}L - {pushes}P")
+            print("="*60)
+            break
+
+
 if __name__ == "__main__":
     EPSILON = 0.1
-    EXPLORING_STARTS = True     
+    EXPLORING_STARTS = True
     EVAL_GAMES = 50_000
 
-    print("Training Monte Carlo agent with true-count buckets (6-deck shoe, realistic reshuffle)...")
-    t0 = time.time()
-    Q, learned_policy = train_mc_onpolicy(num_episodes=TRAIN_EPISODES,
-                                          epsilon=EPSILON,
-                                          exploring_starts=EXPLORING_STARTS,
-                                          print_every=50_000,
-                                          shoe=SHOE)
-    t1 = time.time()
-    print(f"Training done in {t1 - t0:.1f}s")
+    # Ask user what they want to do
+    print("="*60)
+    print("BLACKJACK MONTE CARLO AI")
+    print("="*60)
+    print("\nWhat would you like to do?")
+    print("1. Train AI and see statistics")
+    print("2. Train AI, then play interactive game")
 
-    print("\nEvaluating learned policy on a fresh shoe...")
-    results_learned = evaluate_policy(learned_policy, num_games=EVAL_GAMES, num_decks=NUM_DECKS, reshuffle_cut=RESHUFFLE_CUT)
-    print("Learned policy:", results_learned)
+    choice = input("\nEnter choice (1/2): ").strip()
 
-    print("\nEvaluating naive baseline (hit < 17) on a fresh shoe...")
-    results_baseline = evaluate_policy(naive_baseline_policy, num_games=EVAL_GAMES, num_decks=NUM_DECKS, reshuffle_cut=RESHUFFLE_CUT)
-    print("Baseline policy:", results_baseline)
+    if choice == "1":
+        # Original behavior - train and evaluate
+        print("\nTraining Monte Carlo agent with true-count buckets (6-deck shoe, realistic reshuffle)...")
+        t0 = time.time()
+        Q, learned_policy = train_mc_onpolicy(num_episodes=TRAIN_EPISODES,
+                                              epsilon=EPSILON,
+                                              exploring_starts=EXPLORING_STARTS,
+                                              print_every=50_000,
+                                              shoe=SHOE)
+        t1 = time.time()
+        print(f"Training done in {t1 - t0:.1f}s")
 
-    print("\nEvaluating random policy on a fresh shoe...")
-    results_random = evaluate_policy(random_policy, num_games=EVAL_GAMES, num_decks=NUM_DECKS, reshuffle_cut=RESHUFFLE_CUT)
-    print("Random policy:", results_random)
+        print("\nEvaluating learned policy on a fresh shoe...")
+        results_learned = evaluate_policy(learned_policy, num_games=EVAL_GAMES, num_decks=NUM_DECKS, reshuffle_cut=RESHUFFLE_CUT)
+        print("Learned policy:", results_learned)
 
-    print("\nSample policy (player_sum, usable_ace, dealer_upcard, tc_bucket) -> action (learned)")
-    samples = [
-        State(12, False, 2, tc_to_bucket(-1.5)),
-        State(12, False, 10, tc_to_bucket(2.2)),
-        State(16, False, 10, tc_to_bucket(0.0)),
-        State(18, False, 9, tc_to_bucket(4.5)),
-        State(13, True, 6, tc_to_bucket(1.1)),
-        State(20, False, 10, tc_to_bucket(-3.0))
-    ]
-    for s in samples:
-        print(s, "->", learned_policy(s))
+        print("\nEvaluating naive baseline (hit < 17) on a fresh shoe...")
+        results_baseline = evaluate_policy(naive_baseline_policy, num_games=EVAL_GAMES, num_decks=NUM_DECKS, reshuffle_cut=RESHUFFLE_CUT)
+        print("Baseline policy:", results_baseline)
+
+        print("\nEvaluating random policy on a fresh shoe...")
+        results_random = evaluate_policy(random_policy, num_games=EVAL_GAMES, num_decks=NUM_DECKS, reshuffle_cut=RESHUFFLE_CUT)
+        print("Random policy:", results_random)
+
+        print("\nSample policy (player_sum, usable_ace, dealer_upcard, tc_bucket) -> action (learned)")
+        samples = [
+            State(12, False, 2, tc_to_bucket(-1.5)),
+            State(12, False, 10, tc_to_bucket(2.2)),
+            State(16, False, 10, tc_to_bucket(0.0)),
+            State(18, False, 9, tc_to_bucket(4.5)),
+            State(13, True, 6, tc_to_bucket(1.1)),
+            State(20, False, 10, tc_to_bucket(-3.0))
+        ]
+        for s in samples:
+            print(s, "->", learned_policy(s))
+
+    elif choice == "2":
+        # Full training then play
+        print("\nTraining Monte Carlo agent with true-count buckets (6-deck shoe, realistic reshuffle)...")
+        t0 = time.time()
+        Q, learned_policy = train_mc_onpolicy(num_episodes=TRAIN_EPISODES,
+                                              epsilon=EPSILON,
+                                              exploring_starts=EXPLORING_STARTS,
+                                              print_every=50_000,
+                                              shoe=SHOE)
+        t1 = time.time()
+        print(f"Training done in {t1 - t0:.1f}s")
+
+        # Start interactive game
+        play_interactive_game(learned_policy)
+
+    else:
+        print("Invalid choice. Exiting.")
