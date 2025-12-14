@@ -299,6 +299,15 @@ def evaluate_policy(policy_fn, num_games=10000, num_decks=NUM_DECKS, reshuffle_c
     }
 
 
+def format_card(card):
+    """Format card for display: 1 -> A, others as-is"""
+    return 'A' if card == 1 else str(card)
+
+def format_hand(hand):
+    """Format a hand for display with aces shown as 'A'"""
+    return '[' + ', '.join(format_card(c) for c in hand) + ']'
+
+
 def play_interactive_game(learned_policy):
     """
     Interactive terminal blackjack game.
@@ -326,8 +335,8 @@ def play_interactive_game(learned_policy):
         print("\n" + "="*60)
         print(f"HAND #{total_hands}")
         print("="*60)
-        print(f"Dealer shows: {dealer_up}")
-        print(f"Your hand: {player} -> Sum: {sum_hand(player)}")
+        print(f"Dealer shows: {format_card(dealer_up)}")
+        print(f"Your hand: {format_hand(player)} -> Sum: {sum_hand(player)}")
         if usable_ace(player):
             print("   (You have a usable Ace!)")
 
@@ -354,8 +363,8 @@ def play_interactive_game(learned_policy):
             if action == 'hit':
                 card = draw_card(shoe)
                 player.append(card)
-                print(f"\nYou drew: {card}")
-                print(f"Your hand: {player} -> Sum: {sum_hand(player)}")
+                print(f"\nYou drew: {format_card(card)}")
+                print(f"Your hand: {format_hand(player)} -> Sum: {sum_hand(player)}")
 
                 if is_bust(player):
                     print("\nBUST! You lose this hand.")
@@ -374,9 +383,9 @@ def play_interactive_game(learned_policy):
 
         # Dealer's turn (if player didn't bust)
         if not player_busted:
-            print(f"\nDealer reveals: {dealer} -> Sum: {sum_hand(dealer)}")
+            print(f"\nDealer reveals: {format_hand(dealer)} -> Sum: {sum_hand(dealer)}")
             dealer = dealer_play(dealer, shoe)
-            print(f"Dealer's final hand: {dealer} -> Sum: {sum_hand(dealer)}")
+            print(f"Dealer's final hand: {format_hand(dealer)} -> Sum: {sum_hand(dealer)}")
 
             if is_bust(dealer):
                 print("Dealer busts!")
