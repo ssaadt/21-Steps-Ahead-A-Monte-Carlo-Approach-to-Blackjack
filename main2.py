@@ -316,7 +316,7 @@ def play_interactive_game(learned_policy, mode='expert'):
     Modes:
     - beginner: Shows AI suggestions, probabilities, and detailed explanations
     - expert: Shows AI suggestions and true count (default)
-    - practice: No AI suggestions, just play 
+    - practice: No AI suggestions, just play
     """
     print("\n" + "╔" + "="*58 + "╗")
     print("║" + " "*58 + "║")
@@ -341,11 +341,20 @@ def play_interactive_game(learned_policy, mode='expert'):
         print("│  Test your skills and learn from your mistakes!          │")
         print("└" + "─"*58 + "┘\n")
 
+    # Betting setup (practice mode has no betting)
+    if mode != 'practice':
+        bankroll = 1000
+        min_bet = 10
+        print(f"  Starting bankroll: ${bankroll}")
+        print(f"  Minimum bet: ${min_bet}\n")
+
     shoe = Shoe(num_decks=NUM_DECKS, reshuffle_cut=RESHUFFLE_CUT)
     total_hands = 0
     wins = 0
     losses = 0
     pushes = 0
+    total_wagered = 0
+    total_won = 0
 
     while True:
         shoe.start_new_hand()
@@ -358,13 +367,67 @@ def play_interactive_game(learned_policy, mode='expert'):
         print("┃" + f"  HAND #{total_hands}".ljust(58) + "┃")
         print("┗" + "━"*58 + "┛")
 
+        # Get true count before dealing
+        tc = shoe.true_count()
+
+        # Betting logic (not for practice mode)
+        if mode != 'practice':
+            # Check if player has enough money
+            if bankroll < min_bet:
+                print("\n  ╔" + "═"*40 + "╗")
+                print("  ║" + "  OUT OF MONEY!  ".center(40) + "║")
+                print("  ║" + f"  Final bankroll: $0".center(40) + "║")
+                print("  ╚" + "═"*40 + "╝\n")
+                break
+
+            print(f"\n  Bankroll: ${bankroll}")
+
+            # Suggest bet based on true count
+            if tc <= 1:
+                suggested_bet = min_bet
+                bet_reason = "Neutral/negative count"
+            elif tc <= 2:
+                suggested_bet = min_bet * 2
+                bet_reason = "Slightly favorable"
+            elif tc <= 3:
+                suggested_bet = min_bet * 4
+                bet_reason = "Good count!"
+            else:
+                suggested_bet = min_bet * 6
+                bet_reason = "Excellent count!"
+
+            # Don't suggest more than 10% of bankroll
+            suggested_bet = min(suggested_bet, bankroll // 10)
+            suggested_bet = max(suggested_bet, min_bet)
+
+            if mode == 'beginner':
+                print(f"  Suggested bet: ${suggested_bet} ({bet_reason})")
+                print(f"  True count: {tc:+.2f}")
+
+            # Get bet from player
+            while True:
+                bet_input = input(f"\n  Enter bet amount (${min_bet}-${bankroll}): $").strip()
+                try:
+                    current_bet = int(bet_input)
+                    if current_bet < min_bet:
+                        print(f"  Minimum bet is ${min_bet}")
+                    elif current_bet > bankroll:
+                        print(f"  You only have ${bankroll}")
+                    else:
+                        break
+                except ValueError:
+                    print("  Please enter a valid number")
+
+            bankroll -= current_bet
+            total_wagered += current_bet
+            print(f"  ✓ Bet placed: ${current_bet}")
+
         print(f"\n  Dealer's Card:  {format_card(dealer_up)}")
         print(f"  Your Hand:      {format_hand(player)} = {sum_hand(player)}")
         if usable_ace(player):
             print("                  └─> Soft hand (usable Ace)")
 
         # Show count info based on mode
-        tc = shoe.true_count()
         if mode == 'beginner':
             print(f"\n  Count Info:     TC: {tc:+.2f}  |  Decks Left: {shoe.decks_remaining():.1f}")
             if tc > 2:
@@ -463,6 +526,8 @@ def play_interactive_game(learned_policy, mode='expert'):
                     print("  ╚" + "═"*30 + "╝")
                     player_busted = True
                     losses += 1
+                    if mode != 'practice':
+                        print(f"  Lost ${current_bet}. Bankroll: ${bankroll}")
                     break
 
                 # Get new AI recommendation for updated hand (except practice mode)
@@ -518,16 +583,26 @@ def play_interactive_game(learned_policy, mode='expert'):
                 print("  ║" + "  YOU WIN!  ".center(30) + "║")
                 print("  ╚" + "═"*30 + "╝")
                 wins += 1
+                if mode != 'practice':
+                    payout = current_bet * 2
+                    bankroll += payout
+                    total_won += payout
+                    print(f"  Won ${current_bet}! New bankroll: ${bankroll}")
             elif result == 0:
                 print("\n  ╔" + "═"*30 + "╗")
                 print("  ║" + "  PUSH (TIE)  ".center(30) + "║")
                 print("  ╚" + "═"*30 + "╝")
                 pushes += 1
+                if mode != 'practice':
+                    bankroll += current_bet  # Return bet
+                    print(f"  Bet returned. Bankroll: ${bankroll}")
             else:
                 print("\n  ╔" + "═"*30 + "╗")
                 print("  ║" + "  DEALER WINS  ".center(30) + "║")
                 print("  ╚" + "═"*30 + "╝")
                 losses += 1
+                if mode != 'practice':
+                    print(f"  Lost ${current_bet}. Bankroll: ${bankroll}")
 
             # Post-hand analysis for practice mode
             if mode == 'practice':
@@ -568,6 +643,11 @@ def play_interactive_game(learned_policy, mode='expert'):
             win_rate = wins / total_hands * 100
             stats_line = f"  ║  Hands: {total_hands}  │  W: {wins}  L: {losses}  P: {pushes}  │  Win Rate: {win_rate:.1f}%"
             print(stats_line + " "*(60 - len(stats_line)) + "║")
+            if mode != 'practice':
+                net_profit = bankroll - 1000
+                profit_sign = "+" if net_profit >= 0 else ""
+                bankroll_line = f"  ║  Bankroll: ${bankroll}  │  Net: {profit_sign}${net_profit}"
+                print(bankroll_line + " "*(60 - len(bankroll_line)) + "║")
         else:
             print(f"  ║  No hands played yet" + " "*37 + "║")
         print(f"  ╚" + "═"*58 + "╝")
@@ -581,6 +661,12 @@ def play_interactive_game(learned_policy, mode='expert'):
             print("  ║" + f"  Final Stats: {wins}W - {losses}L - {pushes}P  ({total_hands} hands)".center(56) + "║")
             if total_hands > 0:
                 print("  ║" + f"  Win Rate: {win_rate:.1f}%".center(56) + "║")
+            if mode != 'practice':
+                net_profit = bankroll - 1000
+                profit_sign = "+" if net_profit >= 0 else ""
+                print("  ║" + " "*56 + "║")
+                print("  ║" + f"  Final Bankroll: ${bankroll}".center(56) + "║")
+                print("  ║" + f"  Net Profit: {profit_sign}${net_profit}".center(56) + "║")
             print("  ╚" + "═"*56 + "╝\n")
             break
 
